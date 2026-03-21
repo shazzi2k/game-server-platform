@@ -1,0 +1,16 @@
+FROM ubuntu:22.04
+
+RUN dpkg --add-architecture i386 && \
+    apt update && \
+    apt install -y lib32gcc-s1 lib32stdc++6 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m steam
+USER steam
+
+# Create expected Steam runtime path
+RUN mkdir -p /home/steam/.steam/sdk64
+
+WORKDIR /home/steam/valheim
+
+ENTRYPOINT ["./start.sh"]

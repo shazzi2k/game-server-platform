@@ -1,0 +1,16 @@
+.env
+*.log
+__pycache__/
+*.pyc
+
+# Game data
+games/
+Zomboid/
+Saves/
+install/
+
+# VM
+*.qcow2
+
+# OS
+.DS_Store

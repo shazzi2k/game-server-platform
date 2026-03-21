@@ -1,0 +1,13 @@
+services:
+  gamebot:
+    build: .
+    container_name: gamebot
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      GUILD_ID: ${GUILD_ID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/libvirt:/var/run/libvirt
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

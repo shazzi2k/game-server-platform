@@ -1,0 +1,5 @@
+discord.py
+docker
+python-a2s
+pyyaml
+psutil

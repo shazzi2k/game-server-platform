@@ -1,0 +1,21 @@
+services:
+  valheim:
+    build: .
+    container_name: valheim
+    restart: unless-stopped
+
+    ports:
+      - "2456:2456/udp"
+      - "2457:2457/udp"
+      - "2458:2458/udp"
+
+    volumes:
+      - /srv/data/games/valheim:/home/steam/valheim
+      - /srv/steamcmd:/home/steam/steamcmd
+
+    mem_limit: 4g
+    stop_grace_period: 2m
+
+    volumes:
+      - /srv/data/games/valheim:/home/steam/valheim
+      - /srv/steamcmd/linux64/steamclient.so:/home/steam/.steam/sdk64/steamclient.so
