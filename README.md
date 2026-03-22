@@ -92,3 +92,22 @@ Users can start and stop servers directly from Discord, while the system automat
 ## 📌 Summary
 
 This project demonstrates a fully automated, self-hosted game infrastructure capable of dynamically managing multiple multiplayer servers with minimal manual intervention.
+
+
+## 🖼️ Screenshots
+
+### ⚙️ Architecture-Diagram
+![Commands](images/architecture-diagram.png)
+
+### 🎮 Discord Bot Commands
+![Commands](images/start-command-example.png)
+
+### ▶️ Starting aDocker game container
+![Start Command](images/starting-docker-container.png)
+
+### ⚙️ Server Startup
+![Starting Server](images/start-vmserver-example.png)
+
+### 🟢 Server Status
+![Server Online](images/server-status-example.png)
+
