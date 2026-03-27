@@ -2,15 +2,29 @@ FROM ubuntu:22.04
 
 RUN dpkg --add-architecture i386 && \
     apt update && \
-    apt install -y lib32gcc-s1 lib32stdc++6 ca-certificates && \
+    apt install -y \
+    wget \
+    ca-certificates \
+    lib32gcc-s1 \
+    lib32stdc++6 && \
     rm -rf /var/lib/apt/lists/*
 
+# 👇 create user FIRST
 RUN useradd -m steam
-USER steam
 
-# Create expected Steam runtime path
-RUN mkdir -p /home/steam/.steam/sdk64
+# install steamcmd
+RUN mkdir -p /steamcmd && \
+    cd /steamcmd && \
+    wget https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && \
+    tar -xvzf steamcmd_linux.tar.gz && \
+    rm steamcmd_linux.tar.gz && \
+    chmod +x /steamcmd/steamcmd.sh && \
+    chown -R steam:steam /steamcmd
 
 WORKDIR /home/steam/valheim
 
-ENTRYPOINT ["./start.sh"]
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+USER steam
+ENTRYPOINT ["/start.sh"]

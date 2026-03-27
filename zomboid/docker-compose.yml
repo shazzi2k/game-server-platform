@@ -4,7 +4,6 @@ services:
     container_name: zomboid
     restart: unless-stopped
     working_dir: /pz
-    command: ./start-server.sh -adminpassword civ6
 
     ports:
       - "16261:16261/udp"

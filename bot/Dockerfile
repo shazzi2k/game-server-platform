@@ -9,6 +9,33 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY bot/ ./bot/
+COPY . .
 
-CMD ["python", "bot/main.py"]
+CMD ["python", "main.py"]
+
+
+
+
+
+
+
+
+
+
+
+#####################################
+
+#FROM python:3.11-slim
+
+#WORKDIR /app
+
+#RUN apt-get update && apt-get install -y \
+ #   libvirt-clients \
+  #  && rm -rf /var/lib/apt/lists/*
+
+#COPY requirements.txt .
+#RUN pip install --no-cache-dir -r requirements.txt
+
+#COPY bot/ ./bot/
+
+#CMD ["python", "main.py"]

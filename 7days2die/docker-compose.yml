@@ -3,10 +3,16 @@ services:
     build: .
     container_name: 7days2die
     restart: unless-stopped
-    working_dir: /7d
-    command: bash -c "./startserver.sh -configfile=serverconfig.xml"
+
     ports:
       - "26900:26900/tcp"
-      - "26900-26902:26900-26902/udp"
+      - "26900:26900/udp"
+      - "26901:26901/udp"
+      - "26902:26902/udp"
+
     volumes:
-      - /srv/data/games/7days2die:/7d
+      - /srv/data/games/7days2die/install:/home/steam/7days
+      - /srv/data/games/7days2die/saves:/home/steam/.local/share/7DaysToDie
+
+    mem_limit: 6g
+    stop_grace_period: 2m

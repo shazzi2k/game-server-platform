@@ -1,14 +1,29 @@
 FROM ubuntu:22.04
 
-RUN apt update && \
+RUN dpkg --add-architecture i386 && \
+    apt update && \
     apt install -y \
-    ca-certificates \
     wget \
+    ca-certificates \
     lib32gcc-s1 \
     lib32stdc++6 && \
-    update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /7d
+RUN useradd -m steam
 
-CMD ["bash", "-c", "./startserver.sh -configfile=serverconfig.xml"]
+# install steamcmd
+RUN mkdir -p /steamcmd && \
+    cd /steamcmd && \
+    wget https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && \
+    tar -xvzf steamcmd_linux.tar.gz && \
+    rm steamcmd_linux.tar.gz && \
+    chmod +x /steamcmd/steamcmd.sh && \
+    chown -R steam:steam /steamcmd
+
+WORKDIR /home/steam/7days
+
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+USER steam
+ENTRYPOINT ["/start.sh"]
