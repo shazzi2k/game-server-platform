@@ -118,7 +118,7 @@ This project demonstrates a fully automated, self-hosted game infrastructure cap
 ## 🖼️ Screenshots
 
 ### ⚙️ Architecture-Diagram
-![Commands](images/architecture-diagram.png)
+![Commands](images/architecture-diagram-v2.png)
 
 ### 🎮 Discord Bot Commands
 ![Commands](images/start-command-example.png)
