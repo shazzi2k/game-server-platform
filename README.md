@@ -12,6 +12,17 @@ Users can start and stop servers directly from Discord, while the system automat
 
 ---
 
+## ⚡ Quick Start
+
+```bash
+git clone https://github.com/shazzi2k/game-server-platform.git
+cd game-server-platform
+docker compose up -d
+
+---
+
+
+
 ## 🏗️ Architecture
 
 - **Docker Containers**
@@ -57,6 +68,11 @@ Users can start and stop servers directly from Discord, while the system automat
 ### 🔄 Automated Updates
 - SteamCMD integration for server updates
 
+### 📊 Monitoring & Observability
+- Prometheus for metrics collection
+- Grafana dashboards for real-time insights
+- Track CPU, RAM, server uptime, and player activity
+
 ---
 
 ## 📁 Project Structure
@@ -82,6 +98,17 @@ game-server-platform/
 - Automation (Discord bot + scripts)
 - Networking (ports, routing, remote access)
 - Infrastructure as Code
+---
+
+## 🧾 Requirements
+
+- Linux host (Ubuntu recommended)
+- Docker + Docker Compose
+- KVM/QEMU with libvirt
+- Windows VM (for DCS/SOTF)
+- Discord bot token
+
+
 
 ---
 
