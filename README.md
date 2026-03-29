@@ -12,16 +12,6 @@ Users can start and stop servers directly from Discord, while the system automat
 
 ---
 
-## ⚡ Quick Start
-
-```bash
-git clone https://github.com/shazzi2k/game-server-platform.git
-cd game-server-platform
-docker compose up -d
-
----
-
-
 
 ## 🏗️ Architecture
 
