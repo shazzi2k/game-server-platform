@@ -198,9 +198,10 @@ async def is_vm_running():
 
 
 def start_vm():
-    subprocess.run(["/usr/bin/virsh", "start", VM_NAME])
+    subprocess.Popen(["/usr/bin/virsh", "start", VM_NAME])
+
 def stop_vm():
-    subprocess.run(["/usr/bin/virsh", "shutdown", VM_NAME])
+    subprocess.Popen(["/usr/bin/virsh", "shutdown", VM_NAME])
 
 async def wait_for_vm_state(target_state, timeout=180):
     start = datetime.datetime.utcnow()
@@ -291,10 +292,11 @@ def get_vm_stats():
         return None, None, None
 
 
+
+
 def get_vm_process_list():
 
     try:
-        # Start tasklist inside VM
         result = subprocess.check_output([
             "/usr/bin/virsh",
             "qemu-agent-command",
@@ -304,29 +306,37 @@ def get_vm_process_list():
 
         pid = json.loads(result)["return"]["pid"]
 
-        # Wait a moment for process to finish
         import time
-        time.sleep(1)
 
-        # Get output
-        status = subprocess.check_output([
-            "/usr/bin/virsh",
-            "qemu-agent-command",
-            VM_NAME,
-            f'{{"execute":"guest-exec-status","arguments":{{"pid":{pid}}}}}'
-        ], text=True)
+        # 🔥 wait longer + poll properly
+        for _ in range(10):
+            time.sleep(1)
 
-        data = json.loads(status)
+            status = subprocess.check_output([
+                "/usr/bin/virsh",
+                "qemu-agent-command",
+                VM_NAME,
+                f'{{"execute":"guest-exec-status","arguments":{{"pid":{pid}}}}}'
+            ], text=True)
 
-        if data["return"].get("out-data"):
-            import base64
-            output = base64.b64decode(data["return"]["out-data"]).decode()
-            return output.lower()
+            data = json.loads(status)
+
+            if data["return"].get("exited"):
+
+                if data["return"].get("out-data"):
+                    import base64
+                    output = base64.b64decode(data["return"]["out-data"]).decode()
+                    return output.lower()
+
+                return ""
+
+        print("VM process check timeout")
 
     except Exception as e:
         print("VM process check failed:", e)
 
     return ""
+
    
 def check_port(ip, port, timeout=2):
     import socket
@@ -340,6 +350,8 @@ def check_port(ip, port, timeout=2):
 # COMMANDS
 # -----------------------------
 
+
+##START CONTAINER COMMAND##
 @tree.command(name="start", description="Start a game server", guild=discord.Object(id=GUILD_ID))
 @app_commands.choices(game=[
     app_commands.Choice(name="Project Zomboid", value="zomboid"),
@@ -380,6 +392,7 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
         if channel:
             await channel.send(f"🟢 **{game.name} is now online and ready.** 🟢")
 
+##STOP CONTAINER COMMAND##
 @tree.command(name="stop", description="Stop a game server", guild=discord.Object(id=GUILD_ID))
 @app_commands.choices(game=[
     app_commands.Choice(name="Project Zomboid", value="zomboid"),
@@ -394,19 +407,29 @@ async def stop(interaction: discord.Interaction, game: app_commands.Choice[str])
     await interaction.response.defer(ephemeral=True)
 
     container = docker_client.containers.get(game.value)
-
+    
+    container.reload()
     if container.status != "running":
         await interaction.followup.send(f"{game.name} is already stopped.", ephemeral=True)
         return
 
-    container.stop()
+    # stop container safely (non-blocking)
+    await asyncio.to_thread(container.stop, timeout=10)
 
+    # force kill if still running (7DTD fix)
+    container.reload()
+    if container.status == "running":
+        await asyncio.to_thread(container.kill)
+
+    # send messages AFTER stop completes
     channel = client.get_channel(NOTIFY_CHANNEL_ID)
     if channel:
         await channel.send(f"🛑 **{game.name} has been stopped by an admin.** 🛑")
 
     await interaction.followup.send(f"{game.name} stopped successfully.", ephemeral=True)
 
+
+##STATUS COMMAND##
 @tree.command(name="status", description="Show server infrastructure status", guild=discord.Object(id=GUILD_ID))
 async def status(interaction: discord.Interaction):
 
@@ -544,6 +567,7 @@ async def status(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
+##ACTIVE PLAYERS COMMAND##
 @tree.command(name="players", description="Show current players", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(game="Game name")
 @app_commands.choices(game=[
@@ -556,13 +580,15 @@ async def status(interaction: discord.Interaction):
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
     await interaction.response.defer()
-    
+
+    # 🔴 VM not running check (DCS only)
     if game.value == "dcs" and not await is_vm_running():
         await interaction.followup.send(
             "🔴 DCS server is offline (VM not running)."
         )
         return
 
+    # VM games
     if game.value in VM_GAMES:
         config = VM_GAMES[game.value]
         query_ip = VM_IP
@@ -571,6 +597,20 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
         config = GAMES[game.value]
         query_ip = config["query_ip"]
         port = config["port"]
+
+    # 🔥 SPECIAL CASE: DCS (NO A2S)
+    if game.value == "dcs":
+        if check_port(VM_IP, config["check_port"]):
+            await interaction.followup.send(
+                f"🟢 {config['name']} is online\nPlayers: ❓ (not supported)"
+            )
+        else:
+            await interaction.followup.send(
+                f"🔴 {config['name']} is offline"
+            )
+        return
+
+    # ✅ Normal A2S games
     try:
         info = await asyncio.to_thread(
             a2s.info,
@@ -586,6 +626,8 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
             f"🔴 {game.name} is offline or not responding."
         )
 
+
+##STOP WINVM COMMAND##
 @tree.command(name="stopvm", description="Stop Windows VM", guild=discord.Object(id=GUILD_ID))
 async def stopvm(interaction: discord.Interaction):
 
@@ -609,6 +651,7 @@ async def stopvm(interaction: discord.Interaction):
     else:
         await msg.edit(content="⚠️ VM shutdown timeout. Check the host.")
 
+##START A WINVM GAME##
 @tree.command(name="startvmgame", description="Start a VM hosted game", guild=discord.Object(id=GUILD_ID))
 @app_commands.choices(game=[
     app_commands.Choice(name="DCS World", value="dcs"),
@@ -629,29 +672,17 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
     # CHECK IF ANOTHER VM GAME IS RUNNING
     # -----------------------------
 
+    process_list = await asyncio.to_thread(get_vm_process_list)
+
     for key, cfg in VM_GAMES.items():
 
-        try:
+        if cfg["process"].lower() in process_list:
 
-            result = subprocess.run(
-                [
-                    "/usr/bin/virsh",
-                    "qemu-agent-command",
-                    VM_NAME,
-                    f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\tasklist.exe","arg":["/FI","IMAGENAME eq {cfg["process"]}"]}}}}'
-                ],
-                capture_output=True,
-                text=True
+            await msg.edit(
+                content=f"⚠️ **{cfg['name']}** is already running. Stop it first."
             )
+            return
 
-            if cfg["process"].lower() in result.stdout.lower():
-                await msg.edit(
-                    content=f"⚠️ **{cfg['name']}** is already running. Stop it first."
-                )
-                return
-
-        except Exception as e:
-            print("Process check failed:", e)
 
     # -----------------------------
     # START VM IF NEEDED
@@ -683,14 +714,14 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
 
 
     await msg.edit(content=f"🎮 Launching **{config['name']}**...")
-    await asyncio.sleep(10)  # give Windows a moment after boot
+    await asyncio.sleep(20)  # give Windows a moment after boot
     await asyncio.to_thread(
         subprocess.run,
         [
             "/usr/bin/virsh",
             "qemu-agent-command",
             VM_NAME,
-            f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\schtasks.exe","arg":["/run","/tn","{config["task"]}"]}}}}'
+            f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\schtasks.exe","arg":["/run","/tn","{config["task"]}","/I"]}}}}'
         ]
     )
 
@@ -720,7 +751,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
         await msg.edit(content="⚠️ Game server did not respond in time.")
 
 
-
+##STOP WINVM GAME COMMAND##
 @tree.command(name="stopvmgame", description="Stop a VM hosted game", guild=discord.Object(id=GUILD_ID))
 @app_commands.choices(game=[
     app_commands.Choice(name="DCS World", value="dcs"),
@@ -750,7 +781,7 @@ async def stopvmgame(interaction: discord.Interaction, game: app_commands.Choice
     await msg.edit(content=f"🛑 **{config['name']} stopped.**")
 
 
-
+##SERVERSTATS COMMAND (obsolete)##
 @tree.command(
     name="serverstats",
     description="Show host CPU and RAM usage",
@@ -784,6 +815,7 @@ async def serverstats(interaction: discord.Interaction):
         f"Uptime: **{uptime_str}**"
     )
 
+##TIDY CHANNEL MESSAGES##
 @tree.command(name="clearcommands", description="Clear bot messages from command channel", guild=discord.Object(id=GUILD_ID))
 async def clearcommands(interaction: discord.Interaction):
 
@@ -810,6 +842,7 @@ async def clearcommands(interaction: discord.Interaction):
         ephemeral=True
     )
 
+##START WINVM COMMAND##
 @tree.command(
     name="startvm",
     description="Start the game VM",
@@ -861,16 +894,22 @@ async def monitor_vm_games():
                 vm_last_seen[game_key] = None
                 continue
 
-            try:
-                info = await asyncio.to_thread(
-                    a2s.info,
-                    (VM_IP, config["check_port"]),
-                    5.0
-                )
-                players = info.player_count
+            if game_key == "dcs":
 
-            except:
-                players = 0
+                # DCS has no A2S → treat as active if port is open
+                players = 1 if check_port(VM_IP, config["check_port"]) else 0
+
+            else:
+                try:
+                    info = await asyncio.to_thread(
+                        a2s.info,
+                        (VM_IP, config["check_port"]),
+                        5.0
+                    )
+                    players = info.player_count
+
+                except:
+                    players = 0
 
             now = datetime.datetime.utcnow()
 

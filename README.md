@@ -60,14 +60,18 @@ Users can start and stop servers directly from Discord, while the system automat
 ---
 
 ## 📁 Project Structure
-- bot/ # Discord bot + automation
-- zomboid/ # Zomboid Docker setup
-- valheim/ # Valheim Docker setup
-- 7days2die/ # 7DTD Docker setup
-- scripts/ # Automation + maintenance scripts
-- vm/ # Windows VM documentation
-- automation/ # Cron jobs (optional)
-
+game-server-platform/
+├── bot/                # Discord bot
+├── vm/                 # VM config + README
+├── docker/             # (current game containers 👇)
+│   ├── 7days2die/
+│   ├── valheim/
+│   └── zomboid/
+├── scripts/            # host scripts
+├── automation/         # Crontab
+├── images/             # diagrams/screenshots
+├── docs/               # rebuild
+└── README.md
 
 ---
 
