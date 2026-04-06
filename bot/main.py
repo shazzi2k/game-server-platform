@@ -31,7 +31,7 @@ docker_client = docker.from_env()
 
 IDLE_LIMIT = 3600
 CHECK_INTERVAL = 300
-MAX_RUNNING_SERVERS = 2
+MAX_RUNNING_SERVERS = 4
 
 GAMES = {
     "zomboid": {
@@ -1044,8 +1044,7 @@ async def monitor_idle():
 
                     if idle_time >= IDLE_LIMIT:
 
-                        container.stop()
-
+                        await asyncio.to_thread(container.stop, timeout=60)
                         channel = client.get_channel(NOTIFY_CHANNEL_ID)
 
                         if channel:
