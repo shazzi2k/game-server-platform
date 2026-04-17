@@ -1,6 +1,11 @@
 #!/bin/bash
+set -a
+source /srv/data/stacks/game-server-platform/.env
+set +a
 
-WEBHOOK="https://discord.com/api/webhooks/1477250838006071297/ThaNqtMprPxnupVdNUPMVIa-jOqvm5qJIqpmatQdud-Afhz2vHFVimP2t8-9HApNZfgK"
+
+
+WEBHOOK="$DISCORD_WEBHOOK"
 SERVICE=$1
 LOCKFILE="/tmp/${SERVICE}_restart.lock"
 
