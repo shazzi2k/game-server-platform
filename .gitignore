@@ -8,7 +8,7 @@ games/
 Zomboid/
 Saves/
 install/
-
+instances/
 # VM
 *.qcow2
 

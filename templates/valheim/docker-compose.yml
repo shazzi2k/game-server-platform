@@ -1,0 +1,17 @@
+services:
+  valheim:
+    build: .
+    container_name: valheim
+    restart: unless-stopped
+
+    ports:
+      - "2456:2456/udp"
+      - "2457:2457/udp"
+      - "2458:2458/udp"
+
+    volumes:
+      - /srv/data/games/valheim/install:/home/steam/valheim
+      - /srv/data/games/valheim/saves:/home/steam/.config/unity3d/IronGate/Valheim
+
+    mem_limit: 4g
+    stop_grace_period: 2m

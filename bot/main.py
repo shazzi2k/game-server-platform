@@ -63,10 +63,16 @@ VM_GAMES = {
         "task": "StartSOTF",
         "process": "SonsOfTheForestDS.exe",
         "check_port": 27016
+    },
+    "arma3": {
+        "name": "ARMA 3 Exile",
+        "task": "StartArma3",
+        "process": "arma3server_x64.exe",
+        "check_port": 2302
     }
 }
 
-VM_IDLE_LIMIT = 1800  # 30 minutes
+VM_IDLE_LIMIT = 3600  # 60 minutes
 vm_last_seen = {key: None for key in VM_GAMES}
 vm_idle_start = None
 
@@ -576,15 +582,16 @@ async def status(interaction: discord.Interaction):
     app_commands.Choice(name="valheim", value="valheim"),
     app_commands.Choice(name="DCS World", value="dcs"),
     app_commands.Choice(name="Sons of the Forest", value="sotf"),
+    app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
 ])
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
     await interaction.response.defer()
 
-    # 🔴 VM not running check (DCS only)
-    if game.value == "dcs" and not await is_vm_running():
+    # 🔴 VM not running check
+    if game.value in ["dcs", "arma3"] and not await is_vm_running():
         await interaction.followup.send(
-            "🔴 DCS server is offline (VM not running)."
+            f"🔴 {game.name} is offline (VM not running)."
         )
         return
 
@@ -598,7 +605,7 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
         query_ip = config["query_ip"]
         port = config["port"]
 
-    # 🔥 SPECIAL CASE: DCS (NO A2S)
+    # 🔥 DCS (no A2S)
     if game.value == "dcs":
         if check_port(VM_IP, config["check_port"]):
             await interaction.followup.send(
@@ -608,6 +615,39 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
             await interaction.followup.send(
                 f"🔴 {config['name']} is offline"
             )
+        return
+
+    # 🔥 ARMA (A2S + fallback)
+    if game.value == "arma3":
+
+        # Try A2S first
+        try:
+            info = await asyncio.to_thread(
+                a2s.info,
+                (VM_IP, config["check_port"]),
+                5.0
+            )
+
+            await interaction.followup.send(
+                f"🟢 {config['name']} is online\nPlayers: **{info.player_count}**"
+            )
+            return
+
+        except Exception:
+            pass
+
+        # Fallback → process check
+        process_list = await asyncio.to_thread(get_vm_process_list)
+
+        if config["process"].lower() in process_list:
+            await interaction.followup.send(
+                f"🟡 {config['name']} is running\nPlayers: ❓ (query failed)"
+            )
+        else:
+            await interaction.followup.send(
+                f"🔴 {config['name']} is offline"
+            )
+
         return
 
     # ✅ Normal A2S games
@@ -656,6 +696,7 @@ async def stopvm(interaction: discord.Interaction):
 @app_commands.choices(game=[
     app_commands.Choice(name="DCS World", value="dcs"),
     app_commands.Choice(name="Sons of the Forest", value="sotf"),
+    app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
 ])
 async def startvmgame(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -756,6 +797,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
 @app_commands.choices(game=[
     app_commands.Choice(name="DCS World", value="dcs"),
     app_commands.Choice(name="Sons Of The Forest", value="sotf"),
+    app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
 ])
 async def stopvmgame(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -894,10 +936,28 @@ async def monitor_vm_games():
                 vm_last_seen[game_key] = None
                 continue
 
-            if game_key == "dcs":
+                if game_key == "dcs":
+                 players = 1 if check_port(VM_IP, config["check_port"]) else 0
 
-                # DCS has no A2S → treat as active if port is open
-                players = 1 if check_port(VM_IP, config["check_port"]) else 0
+            elif game_key == "arma3":
+
+                # Try A2S first
+                try:
+                    info = await asyncio.to_thread(
+                        a2s.info,
+                        (VM_IP, config["check_port"]),
+                        5.0
+                    )
+                    players = info.player_count
+
+                except:
+                    # Fallback → process detection
+                    process_list = await asyncio.to_thread(get_vm_process_list)
+
+                    if config["process"].lower() in process_list:
+                        players = 1
+                    else:
+                        players = 0
 
             else:
                 try:
@@ -907,7 +967,6 @@ async def monitor_vm_games():
                         5.0
                     )
                     players = info.player_count
-
                 except:
                     players = 0
 
@@ -951,10 +1010,12 @@ async def monitor_vm_games():
         # VM SHUTDOWN CHECK
         # -----------------------------
 
-        dcs_running = check_port(VM_IP, 10308)
-        sotf_running = check_port(VM_IP, 27016)
+        process_list = await asyncio.to_thread(get_vm_process_list)
 
-        any_vm_game_running = dcs_running or sotf_running
+        any_vm_game_running = any(
+            cfg["process"].lower() in process_list
+            for cfg in VM_GAMES.values()
+        )
 
 
         if any_vm_game_running:
@@ -973,7 +1034,7 @@ async def monitor_vm_games():
 
                 if channel:
                     await channel.send(
-                        "🛑 Windows VM shutting down (no active VM game servers)"
+                        "🛑 Windows VM shutting down (no active VM game servers for 60minutes)"
                     )
 
                 stop_vm()
