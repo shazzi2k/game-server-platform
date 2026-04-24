@@ -31,49 +31,52 @@ docker_client = docker.from_env()
 
 IDLE_LIMIT = 3600
 CHECK_INTERVAL = 300
-MAX_RUNNING_SERVERS = 4
+MAX_RUNNING_SERVERS = 2
 
-GAMES = {
+ALL_GAMES = {
     "zomboid": {
         "name": "Project Zomboid",
-        "port": 16261,
-        "query_ip": "192.168.0.96"
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 16261
     },
     "7days2die": {
         "name": "7 Days To Die",
-        "port": 26900,
-        "query_ip": "192.168.0.96"
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 26900
     },
     "valheim": {
         "name": "Valheim",
-        "port": 2457,
-        "query_ip": "192.168.0.96"
-    }
-}
-
-VM_GAMES = {
-    "dcs": {
-        "name": "DCS World",
-        "task": "StartDCS",
-        "process": "DCS_server.exe",
-        "check_port": 10308
-    },
-    "sotf": {
-        "name": "Sons Of The Forest",
-        "task": "StartSOTF",
-        "process": "SonsOfTheForestDS.exe",
-        "check_port": 27016
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 2457
     },
     "arma3": {
         "name": "ARMA 3 Exile",
-        "task": "StartArma3",
+        "type": "vm",
         "process": "arma3server_x64.exe",
-        "check_port": 2302
+        "port": 2303
+    },
+    "sotf": {
+        "name": "Sons Of The Forest",
+        "type": "vm",
+        "process": "SonsOfTheForestDS.exe",
+        "port": 27016
+    },
+    "dcs": {
+        "name": "DCS World",
+        "type": "vm",
+        "process": "DCS_server.exe",
+        "port": 10308,
+        "no_query": True  # important
     }
 }
 
 VM_IDLE_LIMIT = 3600  # 60 minutes
-vm_last_seen = {key: None for key in VM_GAMES}
+vm_last_seen = {
+    key: None for key, cfg in ALL_GAMES.items() if cfg["type"] == "vm"
+}
 vm_idle_start = None
 
 
@@ -107,6 +110,48 @@ async def enforce_permissions(interaction: discord.Interaction, require_mod=Fals
         return False
 
     return True
+
+async def get_player_count(game_key, config):
+
+    # ------------------
+    # DOCKER GAMES
+    # ------------------
+    if config["type"] == "docker":
+        try:
+            info = await asyncio.to_thread(
+                a2s.info,
+                (config["query_ip"], config["port"]),
+                5.0
+            )
+            return info.player_count
+        except:
+            return 0
+
+    # ------------------
+    # VM GAMES
+    # ------------------
+    if config["type"] == "vm":
+
+        # DCS (no query support)
+        if config.get("no_query"):
+            return 1 if check_port(VM_IP, config["port"]) else 0
+
+        # Try A2S
+        try:
+            info = await asyncio.to_thread(
+                a2s.info,
+                (VM_IP, config["port"]),
+                5.0
+            )
+            return info.player_count
+
+        except:
+            # fallback to process detection
+            process_list = await asyncio.to_thread(get_vm_process_list)
+
+            if config["process"].lower() in process_list:
+                return 1
+            return 0
 
 async def wait_for_dcs_ready():
 
@@ -166,8 +211,7 @@ async def on_ready():
 
     print("Starting monitors...")
 
-    asyncio.create_task(monitor_idle())
-    asyncio.create_task(monitor_vm_games())
+    asyncio.create_task(monitor_all_games())
 
 
 # -----------------------------
@@ -232,7 +276,10 @@ async def wait_for_vm_state(target_state, timeout=180):
 
 def get_active_game_containers():
     running = docker_client.containers.list()
-    return [c.name for c in running if c.name in GAMES]
+    return [
+        c.name for c in running
+        if c.name in ALL_GAMES and ALL_GAMES[c.name]["type"] == "docker"
+    ]
 
 def is_running(container_name):
     try:
@@ -368,12 +415,13 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
 
     await interaction.response.defer(ephemeral=True)
 
-    if await is_vm_running():
-        await interaction.followup.send(
-            "⚠️ Windows VM is currently running. Stop it before starting game servers.",
-            ephemeral=True
-        )
-        return
+    #temp disabled while i try a new system for tracking idle VM games
+    #if await is_vm_running():
+    #    await interaction.followup.send(
+     #       "⚠️ Windows VM is currently running. Stop it before starting game servers.",
+     #       ephemeral=True
+      #  )
+      #  return
 
 
     if len(get_active_game_containers()) >= MAX_RUNNING_SERVERS:
@@ -444,89 +492,97 @@ async def status(interaction: discord.Interaction):
 
     await interaction.response.defer()
 
-    # Host stats
+    # -----------------------
+    # LOAD JSON STATE
+    # -----------------------
+    try:
+        with open("/srv/data/stacks/game-server-platform/server_state.json") as f:
+            data = json.load(f)
+    except:
+        data = {}
+
+    # -----------------------
+    # HOST STATS
+    # -----------------------
     cpu = psutil.cpu_percent(interval=1)
     ram = psutil.virtual_memory()
 
     host_cpu = f"{cpu}%"
     host_ram = f"{round(ram.used/(1024**3),2)}GB / {round(ram.total/(1024**3),2)}GB"
 
-    
-    # VM status
-    if await is_vm_running():
+    # -----------------------
+# VM STATUS
+# -----------------------
+    vm_is_running = await is_vm_running()
 
-        vm_games_active = False
-
-        for key, cfg in VM_GAMES.items():
-            try:
-                result = subprocess.run(
-                    ["nc", "-z", VM_IP, str(cfg["check_port"])],
-                    capture_output=True
-                )
-
-                if result.returncode == 0:
-                    vm_games_active = True
-                    break
-
-            except:
-                pass
-
-        if vm_games_active:
-            vm_status = "🟢 Running (Game Active)"
-        else:
-            vm_status = "🟡 Running (Idle)"
-
+    if vm_is_running:
+        vm_status = "🟢 Running"
+        process_list = await asyncio.to_thread(get_vm_process_list)
     else:
         vm_status = "🔴 Stopped"
+        process_list = ""
 
-    # DCS server status
-    # VM game servers
+    # -----------------------
+    # VM GAMES (REAL CHECK)
+    # -----------------------
+    vm_lines = []
 
-    vm_game_lines = []
-
-    if await is_vm_running():
-
-        process_list = await asyncio.to_thread(get_vm_process_list)
-
-        for key, cfg in VM_GAMES.items():
-
-            if cfg["process"].lower() in process_list.lower():
-                state = "🟢 Online"
-            else:
-                state = "🔴 Offline"
-
-            vm_game_lines.append(f"{cfg['name']} : {state}")
-
-    else:
-
-         for key, cfg in VM_GAMES.items():
-             vm_game_lines.append(f"{cfg['name']} : 🔴 Offline")
-
-    vm_games_status = "\n".join(vm_game_lines)
-
-
-
- 
-    # Docker servers
-    docker_lines = []
-
-    for key, config in GAMES.items():
-
-        if key == "dcs":
+    for key, config in ALL_GAMES.items():
+        if config["type"] != "vm":
             continue
 
-        if is_running(key):
-            state = "🟢 Running"
+        # VM itself is off → everything offline
+        if not vm_is_running:
+            vm_lines.append(f"{config['name']} : 🔴 (0 players)")
+            continue
+
+        # 🔥 CRITICAL: check if THIS game process is running
+        is_running_vm_game = config["process"].lower() in process_list
+
+        if not is_running_vm_game:
+            vm_lines.append(f"{config['name']} : 🔴 (0 players)")
+            continue
+
+        # Game is running → now check players
+        players = await get_player_count(key, config)
+
+        if players > 0:
+            icon = "🟢"
         else:
-            state = "🔴 Stopped"
+            icon = "🟡"
 
-        docker_lines.append(f"{config['name']} : {state}")
+        vm_lines.append(f"{config['name']} : {icon} ({players} players)")
 
-    docker_status = "\n".join(docker_lines)
+    vm_status_text = "\n".join(vm_lines) or "No data"
 
+    # -----------------------
+    # DOCKER GAMES
+    # -----------------------
+    docker_lines = []
+
+    for key, config in ALL_GAMES.items():
+        if config["type"] != "docker":
+            continue
+
+        players = await get_player_count(key, config)
+
+        if players > 0:
+            icon = "🟢"
+        else:
+            icon = "🔴"
+
+        docker_lines.append(f"{config['name']} : {icon} ({players} players)")
+
+    docker_status_text = "\n".join(docker_lines) or "No data"
+
+    # -----------------------
+    # CONTAINERS
+    # -----------------------
     active_containers = len(get_active_game_containers())
 
-    # Build embed
+    # -----------------------
+    # EMBED
+    # -----------------------
     embed = discord.Embed(
         title="🖥 Server Infrastructure",
         color=0x2ecc71
@@ -538,30 +594,21 @@ async def status(interaction: discord.Interaction):
         inline=False
     )
 
-    vm_cpu, vm_ram_used, vm_ram_total = get_vm_stats()
-
-    vm_extra = ""
-
-    if vm_ram_used and vm_ram_total:
-        vm_extra = f"\nRAM: **{vm_ram_used}GB / {vm_ram_total}GB**"
-
-    if vm_cpu:
-        vm_extra += f"\nCPU Time: **{vm_cpu}**"
-
     embed.add_field(
         name="Windows VM",
-        value=f"Status: **{vm_status}**{vm_extra}",
+        value=f"Status: **{vm_status}**",
         inline=False
-)
+    )
 
     embed.add_field(
         name="VM Game Servers",
-        value=vm_games_status,
+        value=vm_status_text,
         inline=False
     )
+
     embed.add_field(
         name="Docker Game Servers",
-        value=docker_status,
+        value=docker_status_text,
         inline=False
     )
 
@@ -573,7 +620,7 @@ async def status(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
-##ACTIVE PLAYERS COMMAND##
+## ACTIVE PLAYERS COMMAND ##
 @tree.command(name="players", description="Show current players", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(game="Game name")
 @app_commands.choices(game=[
@@ -588,84 +635,25 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
 
     await interaction.response.defer()
 
-    # 🔴 VM not running check
-    if game.value in ["dcs", "arma3"] and not await is_vm_running():
+    config = ALL_GAMES[game.value]
+
+    # VM not running check
+    if config["type"] == "vm" and not await is_vm_running():
         await interaction.followup.send(
-            f"🔴 {game.name} is offline (VM not running)."
+            f"🔴 {config['name']} is offline (VM not running)."
         )
         return
 
-    # VM games
-    if game.value in VM_GAMES:
-        config = VM_GAMES[game.value]
-        query_ip = VM_IP
-        port = 27016 if game.value == "sotf" else config["check_port"]
+    players = await get_player_count(game.value, config)
+
+    if players > 0:
+        await interaction.followup.send(
+            f"🟢 {config['name']} is online\nPlayers: **{players}**"
+        )
     else:
-        config = GAMES[game.value]
-        query_ip = config["query_ip"]
-        port = config["port"]
-
-    # 🔥 DCS (no A2S)
-    if game.value == "dcs":
-        if check_port(VM_IP, config["check_port"]):
-            await interaction.followup.send(
-                f"🟢 {config['name']} is online\nPlayers: ❓ (not supported)"
-            )
-        else:
-            await interaction.followup.send(
-                f"🔴 {config['name']} is offline"
-            )
-        return
-
-    # 🔥 ARMA (A2S + fallback)
-    if game.value == "arma3":
-
-        # Try A2S first
-        try:
-            info = await asyncio.to_thread(
-                a2s.info,
-                (VM_IP, config["check_port"]),
-                5.0
-            )
-
-            await interaction.followup.send(
-                f"🟢 {config['name']} is online\nPlayers: **{info.player_count}**"
-            )
-            return
-
-        except Exception:
-            pass
-
-        # Fallback → process check
-        process_list = await asyncio.to_thread(get_vm_process_list)
-
-        if config["process"].lower() in process_list:
-            await interaction.followup.send(
-                f"🟡 {config['name']} is running\nPlayers: ❓ (query failed)"
-            )
-        else:
-            await interaction.followup.send(
-                f"🔴 {config['name']} is offline"
-            )
-
-        return
-
-    # ✅ Normal A2S games
-    try:
-        info = await asyncio.to_thread(
-            a2s.info,
-            (query_ip, port),
-            10.0
-        )
         await interaction.followup.send(
-            f"🟢 {game.name} is online\nPlayers: **{info.player_count}**"
+            f"🟡 {config['name']} is running\nPlayers: 0"
         )
-
-    except Exception:
-        await interaction.followup.send(
-            f"🔴 {game.name} is offline or not responding."
-        )
-
 
 ##STOP WINVM COMMAND##
 @tree.command(name="stopvm", description="Stop Windows VM", guild=discord.Object(id=GUILD_ID))
@@ -705,7 +693,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
 
     await interaction.response.defer()
 
-    config = VM_GAMES[game.value]
+    config = ALL_GAMES[game.value]
 
     msg = await interaction.followup.send(f"🎮 Starting **{config['name']}**...")
 
@@ -806,7 +794,7 @@ async def stopvmgame(interaction: discord.Interaction, game: app_commands.Choice
 
     await interaction.response.defer()
 
-    config = VM_GAMES[game.value]
+    config = ALL_GAMES[game.value]
 
     msg = await interaction.followup.send(f"🛑 Stopping **{config['name']}**...")
 
@@ -910,216 +898,165 @@ async def startvm(interaction: discord.Interaction):
 # IDLE MONITOR
 # -----------------------------
 
-async def monitor_vm_games():
-
-    global vm_idle_start
+async def monitor_all_games():
 
     await client.wait_until_ready()
 
+    last_seen = {key: None for key in ALL_GAMES}
+    vm_idle_start = None
+
     while not client.is_closed():
 
-        if not await is_vm_running():
-            await asyncio.sleep(60)
-            continue
+        any_vm_active = False
 
+        # ------------------
+        # GET VM PROCESS LIST ONCE
+        # ------------------
+        process_list = ""
+        if await is_vm_running():
+            process_list = await asyncio.to_thread(get_vm_process_list)
 
-        # -----------------------------
-        # CHECK PLAYER ACTIVITY
-        # -----------------------------
-
-
-        for game_key, config in VM_GAMES.items():
-
-            server_running = check_port(VM_IP, config["check_port"])
-
-            if not server_running:
-                vm_last_seen[game_key] = None
-                continue
-
-                if game_key == "dcs":
-                 players = 1 if check_port(VM_IP, config["check_port"]) else 0
-
-            elif game_key == "arma3":
-
-                # Try A2S first
-                try:
-                    info = await asyncio.to_thread(
-                        a2s.info,
-                        (VM_IP, config["check_port"]),
-                        5.0
-                    )
-                    players = info.player_count
-
-                except:
-                    # Fallback → process detection
-                    process_list = await asyncio.to_thread(get_vm_process_list)
-
-                    if config["process"].lower() in process_list:
-                        players = 1
-                    else:
-                        players = 0
-
-            else:
-                try:
-                    info = await asyncio.to_thread(
-                        a2s.info,
-                        (VM_IP, config["check_port"]),
-                        5.0
-                    )
-                    players = info.player_count
-                except:
-                    players = 0
+        # ------------------
+        # MAIN LOOP
+        # ------------------
+        for key, config in ALL_GAMES.items():
 
             now = datetime.datetime.utcnow()
 
-            if players > 0:
- 
-                vm_last_seen[game_key] = now
+            # ------------------
+            # CHECK IF GAME IS RUNNING
+            # ------------------
+            is_active = False
 
+            if config["type"] == "docker":
+                is_active = is_running(key)
+
+            elif config["type"] == "vm":
+                is_active = config["process"].lower() in process_list
+
+            # ------------------
+            # SKIP IF NOT RUNNING
+            # ------------------
+            if not is_active:
+                last_seen[key] = None
+                continue
+
+            # ------------------
+            # GET PLAYER COUNT
+            # ------------------
+            players = await get_player_count(key, config)
+
+            # ------------------
+            # ACTIVE PLAYERS
+            # ------------------
+            if players > 0:
+                last_seen[key] = now
+
+                if config["type"] == "vm":
+                    any_vm_active = True
+
+            # ------------------
+            # IDLE LOGIC
+            # ------------------
             else:
 
-                if vm_last_seen[game_key] is None:
-                   vm_last_seen[game_key] = now
+                if last_seen[key] is None:
+                    last_seen[key] = now
 
-                idle = (now - vm_last_seen[game_key]).total_seconds()
+                idle = (now - last_seen[key]).total_seconds()
 
                 if idle >= IDLE_LIMIT:
 
-                    channel = client.get_channel(NOTIFY_CHANNEL_ID)
+                    print(f"[AUTO STOP] {config['name']} idle for {idle}s")
 
-                    if channel:
-                        await channel.send(
-                            f"🛑 **{config['name']} stopped automatically**\n"
-                            f"No players for 60 minutes. Absolute losers.."
+                    # STOP DOCKER
+                    if config["type"] == "docker":
+                        try:
+                            container = docker_client.containers.get(key)
+                            await asyncio.to_thread(container.stop, timeout=60)
+                        except Exception as e:
+                            print(f"Failed to stop container {key}: {e}")
+
+                    # STOP VM GAME
+                    elif config["type"] == "vm":
+                        await asyncio.to_thread(
+                            subprocess.run,
+                            [
+                                "/usr/bin/virsh",
+                                "qemu-agent-command",
+                                VM_NAME,
+                                f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\taskkill.exe","arg":["/F","/IM","{config["process"]}"]}}}}'
+                            ]
                         )
 
-                    await asyncio.to_thread(
-                        subprocess.run,
-                        [
-                            "/usr/bin/virsh",
-                            "qemu-agent-command",
-                            VM_NAME,
-                            f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\taskkill.exe","arg":["/F","/IM","{config["process"]}"]}}}}'
-                        ]
-                    )
+                    # DISCORD MESSAGE (FIXED)
+                    try:
+                        channel = await client.fetch_channel(NOTIFY_CHANNEL_ID)
+                        await channel.send(
+                            f"🛑 **{config['name']} stopped automatically (idle 60 minutes)**"
+                        )
+                    except Exception as e:
+                        print(f"Discord send failed: {e}")
 
-                    vm_last_seen[game_key] = None           
+                    last_seen[key] = None
 
+        # ------------------
+        # VM SHUTDOWN (OUTSIDE LOOP)
+        # ------------------
+        if await is_vm_running():
 
-        # -----------------------------
-        # VM SHUTDOWN CHECK
-        # -----------------------------
-
-        process_list = await asyncio.to_thread(get_vm_process_list)
-
-        any_vm_game_running = any(
-            cfg["process"].lower() in process_list
-            for cfg in VM_GAMES.values()
-        )
-
-
-        if any_vm_game_running:
-            vm_idle_start = None
-
-        else:
-
-            if vm_idle_start is None:
-                vm_idle_start = datetime.datetime.utcnow()
-
-            idle = (datetime.datetime.utcnow() - vm_idle_start).total_seconds()
-
-            if idle >= VM_IDLE_LIMIT:
-
-                channel = client.get_channel(NOTIFY_CHANNEL_ID)
-
-                if channel:
-                    await channel.send(
-                        "🛑 Windows VM shutting down (no active VM game servers for 60minutes)"
-                    )
-
-                stop_vm()
+            if any_vm_active:
                 vm_idle_start = None
+            else:
+                if vm_idle_start is None:
+                    vm_idle_start = datetime.datetime.utcnow()
 
+                idle = (datetime.datetime.utcnow() - vm_idle_start).total_seconds()
+
+                if idle >= IDLE_LIMIT:
+
+                    try:
+                        channel = await client.fetch_channel(NOTIFY_CHANNEL_ID)
+                        await channel.send(
+                            "🛑 Windows VM shutting down (no active games 60 minutes)...losers"
+                        )
+                    except Exception as e:
+                        print(f"Discord send failed: {e}")
+
+                    stop_vm()
+                    vm_idle_start = None
 
         await asyncio.sleep(60)
+
+
        
 
 async def wait_for_server_ready(game_key, timeout=180):
     start_time = datetime.datetime.utcnow()
-    config = GAMES[game_key]
+    config = ALL_GAMES[game_key]
 
     while (datetime.datetime.utcnow() - start_time).total_seconds() < timeout:
         try:
-            await asyncio.to_thread(
-                a2s.info,
-                (config["query_ip"], config["port"]),
-                5.0
-            )
+            if config["type"] == "docker":
+                await asyncio.to_thread(
+                    a2s.info,
+                    (config["query_ip"], config["port"]),
+                    5.0
+                )
+            else:
+                await asyncio.to_thread(
+                    a2s.info,
+                    (VM_IP, config["port"]),
+                    5.0
+                )
             return True
-        except Exception:
+        except:
             await asyncio.sleep(5)
 
     return False
 
 
-async def monitor_idle():
-    await client.wait_until_ready()
-    print("Idle monitor started", flush=True)
 
-    last_seen = {key: None for key in GAMES}
-
-    while not client.is_closed():
-
-        for game_key, config in GAMES.items():
-
-            try:
-                container = docker_client.containers.get(game_key)
-
-                if container.status != "running":
-                    last_seen[game_key] = None
-                    continue
-
-                try:
-                    info = await asyncio.to_thread(
-                        a2s.info,
-                        (config["query_ip"], config["port"]),
-                        5.0
-                    )
-                    players = info.player_count
-
-                except:
-                    players = 0
-                print(f"[IDLE CHECK] {config['name']} players={players}")
-                now = datetime.datetime.utcnow()
-
-                if players > 0:
-                    last_seen[game_key] = now
-
-                else:
-
-                    if last_seen[game_key] is None:
-                        last_seen[game_key] = now
-
-                    idle_time = (now - last_seen[game_key]).total_seconds()
-                    print(f"[IDLE TIMER] {config['name']} idle={idle_time}")
-
-                    if idle_time >= IDLE_LIMIT:
-
-                        await asyncio.to_thread(container.stop, timeout=60)
-                        channel = client.get_channel(NOTIFY_CHANNEL_ID)
-
-                        if channel:
-                            await channel.send(
-                                f"🛑 **{config['name']} stopped automatically** 🛑\n"
-                                f"No players were online for 60 minutes. Absolute losers.."
-                            )
-
-                        last_seen[game_key] = None
-
-            except Exception as e:
-                print(f"Idle monitor error for {game_key}: {e}")
-
-        await asyncio.sleep(CHECK_INTERVAL)
 
 
 

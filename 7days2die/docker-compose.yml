@@ -2,7 +2,7 @@ services:
   7days2die:
     build: .
     container_name: 7days2die
-    restart: unless-stopped
+    restart: "no"
 
     ports:
       - "26900:26900/tcp"

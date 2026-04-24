@@ -3,16 +3,24 @@ set -e
 
 echo "Starting 7 Days to Die server..."
 
-# install if missing
-if [ ! -f /home/steam/7days/startserver.sh ]; then
-    echo "Installing 7DTD server..."
-    /steamcmd/steamcmd.sh +login anonymous \
-        +force_install_dir /home/steam/7days \
-        +app_update 294420 validate \
-        +quit
-fi
+INSTALL_DIR="/home/steam/7days"
 
-cd /home/steam/7days
+# install/update
+/steamcmd/steamcmd.sh \
+    +force_install_dir "$INSTALL_DIR" \
+    +login anonymous \
+    +app_update 294420 \
+    +quit
+
+cd "$INSTALL_DIR"
+
+echo "Checking for start script..."
+
+if [ ! -f "./startserver.sh" ]; then
+    echo "ERROR: startserver.sh not found in install dir"
+    ls -la
+    exit 1
+fi
 
 exec ./startserver.sh \
     -configfile=serverconfig.xml \

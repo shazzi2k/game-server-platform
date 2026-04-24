@@ -1,0 +1,39 @@
+{
+  "games": {
+    "zomboid": {
+      "players": 0,
+      "idle": 0,
+      "status": "offline"
+    },
+    "7days2die": {
+      "players": 0,
+      "idle": 803.915122,
+      "status": "idle"
+    },
+    "valheim": {
+      "players": 0,
+      "idle": 0,
+      "status": "offline"
+    }
+  },
+  "vm_games": {
+    "arma3": {
+      "players": 0,
+      "idle": 15997.659242,
+      "status": "idle"
+    },
+    "sons": {
+      "players": 0,
+      "idle": 0,
+      "status": "offline"
+    },
+    "dcs": {
+      "players": 0,
+      "idle": 0,
+      "status": "offline"
+    }
+  },
+  "vm": {
+    "idle": 1661.851258
+  }
+}

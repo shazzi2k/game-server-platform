@@ -2,14 +2,16 @@ services:
   zomboid:
     build: .
     container_name: zomboid
-    restart: unless-stopped
+    restart: "no"
     working_dir: /pz
     ports:
       - "16261:16261/udp"
       - "16262:16262/udp"
       - "8766:8766/udp"
       - "8767:8767/udp"
-
+      - "27015:27015/tcp"
     volumes:
+      - /srv/data/games/zomboid/root:/root/Zomboid
       - /srv/data/games/zomboid/install:/pz
-      - /srv/data/games/zomboid/install/Zomboid:/root/Zomboid
+    environment:
+      - HOME=/pz
