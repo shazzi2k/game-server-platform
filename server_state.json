@@ -7,8 +7,8 @@
     },
     "7days2die": {
       "players": 0,
-      "idle": 803.915122,
-      "status": "idle"
+      "idle": 0,
+      "status": "offline"
     },
     "valheim": {
       "players": 0,
@@ -19,8 +19,8 @@
   "vm_games": {
     "arma3": {
       "players": 0,
-      "idle": 15997.659242,
-      "status": "idle"
+      "idle": 0,
+      "status": "offline"
     },
     "sons": {
       "players": 0,
@@ -34,6 +34,6 @@
     }
   },
   "vm": {
-    "idle": 1661.851258
+    "idle": 369.533424
   }
 }

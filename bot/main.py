@@ -56,20 +56,23 @@ ALL_GAMES = {
         "name": "ARMA 3 Exile",
         "type": "vm",
         "process": "arma3server_x64.exe",
-        "port": 2303
+        "port": 2303,
+        "task": "StartARMA3"
     },
     "sotf": {
         "name": "Sons Of The Forest",
         "type": "vm",
         "process": "SonsOfTheForestDS.exe",
-        "port": 27016
+        "port": 27016,
+        "task": "StartSOTF"
     },
     "dcs": {
         "name": "DCS World",
         "type": "vm",
         "process": "DCS_server.exe",
         "port": 10308,
-        "no_query": True  # important
+        "no_query": True,  # important
+        "task": "StartDCS"
     }
 }
 
@@ -227,7 +230,7 @@ async def wait_for_vm_ready(timeout=180):
         if check_port(VM_IP, 3389):   # RDP port
             return True
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(15)
 
     return False
 
@@ -703,7 +706,9 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
 
     process_list = await asyncio.to_thread(get_vm_process_list)
 
-    for key, cfg in VM_GAMES.items():
+    for key, cfg in ALL_GAMES.items():
+        if cfg["type"] != "vm":
+         continue
 
         if cfg["process"].lower() in process_list:
 
@@ -713,15 +718,15 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
             return
 
 
-    # -----------------------------
-    # START VM IF NEEDED
-    # -----------------------------
+ # -----------------------------
+# START VM IF NEEDED
+# -----------------------------
 
     if not await is_vm_running():
 
         await msg.edit(content="🖥 Starting Windows VM...")
 
-        start_vm()
+        await asyncio.to_thread(start_vm)
 
         ready = await wait_for_vm_state("running")
 
@@ -737,6 +742,24 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
             await msg.edit(content="⚠️ Windows did not become ready.")
             return
 
+
+    # -----------------------------
+    # NOW CHECK IF A VM GAME IS RUNNING
+    # -----------------------------
+
+    process_list = await asyncio.to_thread(get_vm_process_list)
+
+    for key, cfg in ALL_GAMES.items():
+
+        if cfg["type"] != "vm":
+            continue
+
+        if cfg["process"].lower() in process_list:
+            await msg.edit(
+                content=f"⚠️ **{cfg['name']}** is already running. Stop it first."
+            )
+            return
+
 # -----------------------------
 # START GAME
 # -----------------------------
@@ -744,15 +767,51 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
 
     await msg.edit(content=f"🎮 Launching **{config['name']}**...")
     await asyncio.sleep(20)  # give Windows a moment after boot
-    await asyncio.to_thread(
-        subprocess.run,
+    result = await asyncio.to_thread(
+        subprocess.check_output,
         [
             "/usr/bin/virsh",
             "qemu-agent-command",
             VM_NAME,
-            f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\schtasks.exe","arg":["/run","/tn","{config["task"]}","/I"]}}}}'
-        ]
+            f'{{"execute":"guest-exec","arguments":{{"path":"C:\\\\Windows\\\\System32\\\\schtasks.exe","arg":["/run","/tn","{config["task"]}","/I"],"capture-output":true}}}}'
+        ],
+        text=True
     )
+
+    print("QEMU EXEC RESULT:", result)
+
+    # 👇 NOW ALSO CHECK EXEC STATUS (THIS IS CRITICAL)
+    pid = json.loads(result)["return"]["pid"]
+
+    import time
+    for _ in range(10):
+        await asyncio.sleep(1)
+
+        status = await asyncio.to_thread(
+            subprocess.check_output,
+            [
+                "/usr/bin/virsh",
+                "qemu-agent-command",
+                VM_NAME,
+                f'{{"execute":"guest-exec-status","arguments":{{"pid":{pid}}}}}'
+            ],
+            text=True
+        )
+
+        data = json.loads(status)
+
+        if data["return"].get("exited"):
+            if data["return"].get("out-data"):
+                import base64
+                output = base64.b64decode(data["return"]["out-data"]).decode()
+                print("SCHTASKS OUTPUT:", output)
+
+            if data["return"].get("err-data"):
+                import base64
+                err = base64.b64decode(data["return"]["err-data"]).decode()
+                print("SCHTASKS ERROR:", err)
+
+            break
 
     # wait for game server to respond
     await msg.edit(content="⏳ Waiting for game server to start...")
