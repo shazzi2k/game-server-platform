@@ -2,7 +2,7 @@ services:
   zomboid:
     build: .
     container_name: zomboid
-    restart: "no"
+    restart: "unless-stopped"
     working_dir: /pz
     ports:
       - "16261:16261/udp"

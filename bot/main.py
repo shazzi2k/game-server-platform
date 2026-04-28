@@ -137,7 +137,7 @@ async def get_player_count(game_key, config):
 
         # DCS (no query support)
         if config.get("no_query"):
-            return 1 if check_port(VM_IP, config["port"]) else 0
+            return 0 if check_port(VM_IP, config["port"]) else 0
 
         # Try A2S
         try:
@@ -149,11 +149,7 @@ async def get_player_count(game_key, config):
             return info.player_count
 
         except:
-            # fallback to process detection
-            process_list = await asyncio.to_thread(get_vm_process_list)
-
-            if config["process"].lower() in process_list:
-                return 1
+           
             return 0
 
 async def wait_for_dcs_ready():
@@ -248,7 +244,24 @@ async def is_vm_running():
     except:
         return False
 
+def is_game_active(game_key, players, config, process_list):
 
+    # ------------------
+    # ARMA → ignore ghost player
+    # ------------------
+    if game_key == "arma3":
+        return players > 1
+
+    # ------------------
+    # DCS → no player detection → use process
+    # ------------------
+    if game_key == "dcs":
+        return config["process"].lower() in process_list
+
+    # ------------------
+    # NORMAL GAMES
+    # ------------------
+    return players > 0
 
 def start_vm():
     subprocess.Popen(["/usr/bin/virsh", "start", VM_NAME])
@@ -567,16 +580,19 @@ async def status(interaction: discord.Interaction):
         if config["type"] != "docker":
             continue
 
+        is_running_container = is_running(key)
         players = await get_player_count(key, config)
 
-        if players > 0:
-            icon = "🟢"
+        if is_running_container:
+            if players > 0:
+                icon = "🟢"
+            else:
+                icon = "🟡"
         else:
             icon = "🔴"
 
         docker_lines.append(f"{config['name']} : {icon} ({players} players)")
-
-    docker_status_text = "\n".join(docker_lines) or "No data"
+        docker_status_text = "\n".join(docker_lines) or "No data"
 
     # -----------------------
     # CONTAINERS
@@ -735,12 +751,14 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
             return
 
         await msg.edit(content="⏳ Waiting for Windows services...")
-
+        await asyncio.sleep(15)
         vm_ready = await wait_for_vm_ready()
 
         if not vm_ready:
             await msg.edit(content="⚠️ Windows did not become ready.")
+            
             return
+        
 
 
     # -----------------------------
@@ -816,27 +834,34 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
     # wait for game server to respond
     await msg.edit(content="⏳ Waiting for game server to start...")
 
-    ready = True
     for _ in range(90):
 
-        try:
-            info = await asyncio.to_thread(
-                a2s.info,
-                (VM_IP, config["check_port"]),
-                5.0
-            )
+        # ✅ First check: is port open?
+        if check_port(VM_IP, config["port"]):
 
-            await msg.edit(
-                content=f"🟢 **{config['name']} server is now online!**\nPlayers: **{info.player_count}**"
-            )
+            # Try A2S (optional)
+            try:
+                info = await asyncio.to_thread(
+                    a2s.info,
+                    (VM_IP, config["port"]),
+                    5.0
+                )
 
-            break
+                await msg.edit(
+                    content=f"🟢 **{config['name']} server is now online!**\nPlayers: **{info.player_count}**"
+                )
+                return
 
-        except:
-            await asyncio.sleep(5)
+            except:
+                # A2S failed but port is open → server is up
+                await msg.edit(
+                    content=f"🟢 **{config['name']} server is online!** (query not ready yet)"
+                )
+                return
 
-    else:
-        await msg.edit(content="⚠️ Game server did not respond in time.")
+        await asyncio.sleep(5)
+
+    await msg.edit(content=f"🟢 **{config['name']} server is now online!**\nPlayers: **{info.player_count}**")
 
 
 ##STOP WINVM GAME COMMAND##
@@ -1008,7 +1033,7 @@ async def monitor_all_games():
             # ------------------
             # ACTIVE PLAYERS
             # ------------------
-            if players > 0:
+            if is_game_active(key, players, config, process_list):
                 last_seen[key] = now
 
                 if config["type"] == "vm":
