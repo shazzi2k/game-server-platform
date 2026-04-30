@@ -19,8 +19,8 @@
   "vm_games": {
     "arma3": {
       "players": 0,
-      "idle": 282.294021,
-      "status": "idle"
+      "idle": 0,
+      "status": "offline"
     },
     "sons": {
       "players": 0,
@@ -34,6 +34,6 @@
     }
   },
   "vm": {
-    "idle": 362.423926
+    "idle": 0
   }
 }

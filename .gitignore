@@ -2,7 +2,8 @@
 *.log
 __pycache__/
 *.pyc
-
+bot/venv
+venv/
 # Game data
 games/
 Zomboid/

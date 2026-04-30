@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  factorio:
+    build: .
+    container_name: factorio
+    restart: unless-stopped
+
+    working_dir: /factorio
+
+    ports:
+      - "34197:34197/udp"
+      - "27016:27016/tcp"
+
+    volumes:
+      - /srv/data/games/factorio/install/factorio:/factorio
+    command: >
+      /factorio/bin/x64/factorio
+      --start-server /factorio/saves/world.zip
+      --server-settings /factorio/config/server-settings.json
+      --rcon-port 27015
+      --rcon-password ${FACTORIO_RCON_PASSWORD}
