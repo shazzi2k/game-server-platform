@@ -73,6 +73,13 @@ ALL_GAMES = {
         "port": 2303,
         "task": "StartARMA3"
     },
+    "arma3hard": {
+        "name": "ARMA 3 Hard",
+        "type": "vm",
+        "process": "arma3server_x64.exe",
+        "port": 2403,
+        "task": "StartARMA2"
+    },
     "sotf": {
         "name": "Sons Of The Forest",
         "type": "vm",
@@ -223,7 +230,22 @@ async def get_player_count(game_key, config):
             except Exception as e:
                 print(f"[ERROR] arma3 info query failed:", e)
                 return None
+        if game_key == "arma3hard":
 
+            try:
+                info = await asyncio.to_thread(
+                    a2s.info,
+                    (VM_IP, config["port"]),
+                    5.0
+                )
+
+                print(f"[DEBUG] ARMA HARD players (info):", info.player_count)
+
+                return info.player_count
+
+            except Exception as e:
+                print(f"[ERROR] arma3hard info query failed:", e)
+                return None
         # ------------------
         # DCS (no query)
         # ------------------
@@ -354,6 +376,8 @@ def is_game_active(game_key, players, config, process_list):
     # ARMA → ignore ghost player
     # ------------------
     if game_key == "arma3":
+        return players > 0
+    if game_key == "arma3hard":
         return players > 0
 
     # ------------------
@@ -769,6 +793,7 @@ async def status(interaction: discord.Interaction):
     app_commands.Choice(name="Sons of the Forest", value="sotf"),
     app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
     app_commands.Choice(name="Factorio", value="factorio"),
+    app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
 ])
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -824,6 +849,7 @@ async def stopvm(interaction: discord.Interaction):
     app_commands.Choice(name="DCS World", value="dcs"),
     app_commands.Choice(name="Sons of the Forest", value="sotf"),
     app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
+    app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
     
 ])
 async def startvmgame(interaction: discord.Interaction, game: app_commands.Choice[str]):
@@ -872,7 +898,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
             return
 
         await msg.edit(content="⏳ Waiting for Windows services...")
-        await asyncio.sleep(15)
+        await asyncio.sleep(50)
         vm_ready = await wait_for_vm_ready()
 
         if not vm_ready:
@@ -898,6 +924,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
                 content=f"⚠️ **{cfg['name']}** is already running. Stop it first."
             )
             return
+
 
 # -----------------------------
 # START GAME
@@ -991,6 +1018,7 @@ async def startvmgame(interaction: discord.Interaction, game: app_commands.Choic
     app_commands.Choice(name="DCS World", value="dcs"),
     app_commands.Choice(name="Sons Of The Forest", value="sotf"),
     app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
+    app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
 ])
 async def stopvmgame(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
