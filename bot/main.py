@@ -54,6 +54,12 @@ ALL_GAMES = {
         "rcon_port": 27016,
         "rcon_password": FACTORIO_RCON_PASSWORD
     },
+    "conanexiles":{
+        "name": "Conan Exiles",
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 27015,
+    },
     "7days2die": {
         "name": "7 Days To Die",
         "type": "docker",
@@ -560,6 +566,7 @@ def check_port(ip, port, timeout=2):
     app_commands.Choice(name="7 Days To Die", value="7days2die"),
     app_commands.Choice(name="valheim", value="valheim"),
     app_commands.Choice(name="Factorio", value="factorio"),
+    app_commands.Choice(name="Conan Exiles", value="conanexiles"),
 ])
 async def start(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -603,6 +610,7 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
     app_commands.Choice(name="7 Days To Die", value="7days2die"),
     app_commands.Choice(name="valheim", value="valheim"),
     app_commands.Choice(name="Factorio", value="factorio"),
+    app_commands.Choice(name="Conan Exiles", value="conanexiles"),
 ])
 async def stop(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -794,6 +802,7 @@ async def status(interaction: discord.Interaction):
     app_commands.Choice(name="ARMA 3 Exile", value="arma3"),
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
+    app_commands.Choice(name="Conan Exiles", value="conanexiles"),
 ])
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -1184,7 +1193,7 @@ async def monitor_all_games():
                 try:
                     channel = await client.fetch_channel(NOTIFY_CHANNEL_ID)
                     await channel.send(
-                        f"🛑 **{config['name']} stopped automatically (idle 60 minutes)**"
+                        f"🛑 **{config['name']} stopped automatically (No players for 60 minutes)**"
                     )
                 except Exception as e:
                     print(f"Discord send failed: {e}")
@@ -1252,7 +1261,7 @@ async def monitor_all_games():
                     try:
                         channel = await client.fetch_channel(NOTIFY_CHANNEL_ID)
                         await channel.send(
-                            f"🛑 **{config['name']} stopped automatically (idle 60 minutes)**"
+                            f"🛑 **{config['name']} stopped automatically (No players for 60 minutes)**"
                         )
                     except:
                         pass
