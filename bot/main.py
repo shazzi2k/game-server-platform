@@ -39,12 +39,24 @@ IDLE_LIMIT = 3600
 CHECK_INTERVAL = 300
 MAX_RUNNING_SERVERS = 2
 
+STARTUP_TIMES = {
+    "zomboid": 90,
+    "conanexiles": 80,
+    "factorio": 90,
+    "valheim": 90,
+    "7days2die": 86,
+    "arma3": 80,
+    "arma3hard": 80,
+    "sotf": 90,
+    "dcs": 180
+}
+
 ALL_GAMES = {
     "zomboid": {
         "name": "Project Zomboid",
         "type": "docker",
         "query_ip": "192.168.0.96",
-        "port": 16261
+        "port": 16262
     },
     "factorio": {
         "name": "Factorio",
@@ -596,12 +608,17 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
     container.start()
     await interaction.followup.send(f"Starting {game.name}...")
 
-    ready = await wait_for_server_ready(game.value)
+    startup_time = STARTUP_TIMES.get(game.value, 60)
 
-    if ready:
+    await asyncio.sleep(startup_time)
+
+    if is_running(game.value):
         channel = client.get_channel(NOTIFY_CHANNEL_ID)
+
         if channel:
-            await channel.send(f"🟢 **{game.name} is now online and ready.** 🟢")
+            await channel.send(
+                f"🟢 **{game.name} is now online and ready.** 🟢"
+            )
 
 ##STOP CONTAINER COMMAND##
 @tree.command(name="stop", description="Stop a game server", guild=discord.Object(id=GUILD_ID))
