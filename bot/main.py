@@ -48,7 +48,8 @@ STARTUP_TIMES = {
     "arma3": 80,
     "arma3hard": 80,
     "sotf": 90,
-    "dcs": 180
+    "dcs": 180,
+    "dontstarve": 90
 }
 
 ALL_GAMES = {
@@ -112,6 +113,12 @@ ALL_GAMES = {
         "port": 10308,
         "no_query": True,  # important
         "task": "StartDCS"
+    },
+    "dontstarve": {
+        "name": "Don't Starve Together",
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 27016
     }
 }
 
@@ -185,6 +192,32 @@ async def get_player_count(game_key, config):
     # ------------------
     if config["type"] == "docker":
 
+        # ✅ DON'T STARVE TOGETHER
+        if game_key == "dontstarve":
+
+            try:
+                log_file = "/srv/data/games/dontstarve/config/DoNotStarveTogether/MyDediServer/Master/server_log.txt"
+
+                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()[-200:]
+
+                last_auth = -1
+                last_disconnect = -1
+
+                for i, line in enumerate(lines):
+
+                    if "Client authenticated:" in line:
+                        last_auth = i
+
+                    if "Connection lost to" in line:
+                        last_disconnect = i
+
+                return 1 if last_auth > last_disconnect else 0
+
+            except Exception as e:
+                print(f"DST log parse failed: {e}")
+                return 0
+
         # ✅ FACTORIO (RCON)
         if game_key == "factorio":
 
@@ -213,16 +246,21 @@ async def get_player_count(game_key, config):
 
         # ✅ NORMAL A2S DOCKER GAMES
         try:
-            info = await asyncio.to_thread(
-                a2s.info,
-                (config["query_ip"], config["port"]),
-                5.0
-            )
-            return info.player_count
+                info = await asyncio.to_thread(
+                    a2s.info,
+                    (config["query_ip"], config["port"]),
+                    5.0
+                )
+
+                print(f"[DEBUG] {game_key} server info:")
+                print(info)
+                print(f"[DEBUG] player_count={info.player_count}")
+
+                return info.player_count
 
         except Exception as e:
-            print(f"[ERROR] {game_key} query failed:", e)
-            return None   # ✅ correct
+                print(f"[ERROR] {game_key} query failed:", e)
+                return None
 
     # ------------------
     # VM GAMES
@@ -579,6 +617,7 @@ def check_port(ip, port, timeout=2):
     app_commands.Choice(name="valheim", value="valheim"),
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
+    app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
 ])
 async def start(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -628,6 +667,7 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
     app_commands.Choice(name="valheim", value="valheim"),
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
+    app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
 ])
 async def stop(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -820,6 +860,7 @@ async def status(interaction: discord.Interaction):
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
+    app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
 ])
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -834,7 +875,7 @@ async def players(interaction: discord.Interaction, game: app_commands.Choice[st
         )
         return
 
-    players = await get_player_count(game.value, config)
+    players = await get_player_count(game.value, config) or 0
 
     if players > 0:
         await interaction.followup.send(

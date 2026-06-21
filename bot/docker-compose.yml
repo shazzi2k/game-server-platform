@@ -14,5 +14,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/run/libvirt:/var/run/libvirt
       - /srv/scripts:/srv/scripts
+      - /srv/data/games/dontstarve:/srv/data/games/dontstarve:ro
 #extra_hosts:
  #     - "host.docker.internal:host-gateway"

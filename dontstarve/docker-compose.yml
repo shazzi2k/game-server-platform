@@ -1,0 +1,18 @@
+services:
+  dontstarve:
+    build: .
+    container_name: dontstarve
+    restart: "unless-stopped"
+    working_dir: /dontstarve
+    ports:
+      - "10999:10999/udp"
+      - "11000:11000/udp"
+      - "12346:12346/udp"
+      - "27016:27016/udp"
+    volumes:
+      - /srv/data/games/dontstarve/config:/dontstarve/.klei
+      - /srv/data/games/dontstarve/install:/dontstarve
+      
+
+    environment:
+      - HOME=/dontstarve
