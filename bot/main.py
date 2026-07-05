@@ -49,7 +49,8 @@ STARTUP_TIMES = {
     "arma3hard": 80,
     "sotf": 90,
     "dcs": 180,
-    "dontstarve": 90
+    "dontstarve": 90,
+    "atm10": 90
 }
 
 ALL_GAMES = {
