@@ -67,6 +67,12 @@ ALL_GAMES = {
         "rcon_port": 27016,
         "rcon_password": FACTORIO_RCON_PASSWORD
     },
+    "atm10": {
+        "name": "Minecraft ATM10",
+        "type": "docker",
+        "query_ip": "192.168.0.96",
+        "port": 25565
+    },
     "conanexiles":{
         "name": "Conan Exiles",
         "type": "docker",
@@ -618,6 +624,7 @@ def check_port(ip, port, timeout=2):
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
     app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
+    app_commands.Choice(name="Minecraft ATM10", value="atm10"),
 ])
 async def start(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -668,6 +675,7 @@ async def start(interaction: discord.Interaction, game: app_commands.Choice[str]
     app_commands.Choice(name="Factorio", value="factorio"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
     app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
+    app_commands.Choice(name="Minecraft ATM10", value="atm10"),
 ])
 async def stop(interaction: discord.Interaction, game: app_commands.Choice[str]):
 
@@ -861,6 +869,7 @@ async def status(interaction: discord.Interaction):
     app_commands.Choice(name="ARMA 3 Hard", value="arma3hard"),
     app_commands.Choice(name="Conan Exiles", value="conanexiles"),
     app_commands.Choice(name="Don't Starve Together", value="dontstarve"),
+    app_commands.Choice(name="Minecraft ATM10", value="atm10"),
 ])
 async def players(interaction: discord.Interaction, game: app_commands.Choice[str]):
 

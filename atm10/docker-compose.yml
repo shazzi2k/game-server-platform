@@ -1,0 +1,18 @@
+services:
+
+  atm10:
+
+    build: .
+
+    container_name: atm10
+
+    restart: unless-stopped
+
+    ports:
+      - "25565:25565"
+
+    volumes:
+      - /srv/data/games/minecraft-atm10:/data
+
+    tty: true
+    stdin_open: true
