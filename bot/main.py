@@ -192,6 +192,21 @@ factorio_cache = {
     "last_check": 0
 }
 
+from mcstatus import JavaServer
+
+async def get_minecraft_players(config):
+    try:
+        status = await asyncio.to_thread(
+            JavaServer.lookup(f"{config['query_ip']}:{config['port']}").status
+        )
+
+        return status.players.online
+
+    except Exception as e:
+        print(f"Minecraft query failed: {e}")
+        return None
+
+
 async def get_player_count(game_key, config):
 
     # ------------------
@@ -224,6 +239,10 @@ async def get_player_count(game_key, config):
             except Exception as e:
                 print(f"DST log parse failed: {e}")
                 return 0
+
+        #✅ MINECRAFT ATM10
+        if game_key == "atm10":
+            return await get_minecraft_players(config)
 
         # ✅ FACTORIO (RCON)
         if game_key == "factorio":

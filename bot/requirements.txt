@@ -4,4 +4,4 @@ python-dotenv
 python-a2s==1.4.1
 docker
 psutil
-factorio-rcon-py
+mcstatus
